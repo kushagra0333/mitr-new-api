@@ -1,6 +1,6 @@
 import AppError from '../utils/appError.js';
+import Device from '../models/Device.js';
 
-// Example: Restrict device access to owner or admin
 export const checkDeviceOwnership = async (req, res, next) => {
   const device = await Device.findById(req.params.deviceId);
   

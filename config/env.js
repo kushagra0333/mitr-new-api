@@ -8,10 +8,13 @@ const validateEnv = () => {
     'API_KEY',
     'EMAIL_HOST',
     'EMAIL_PORT',
-    'EMAIL_USERNAME',
-    'EMAIL_PASSWORD',
-    'EMAIL_FROM',
+    'EMAIL_FROM'
   ];
+
+  // Only require email credentials in production
+  if (process.env.NODE_ENV === 'production') {
+    requiredEnvVars.push('EMAIL_USERNAME', 'EMAIL_PASSWORD');
+  }
 
   requiredEnvVars.forEach((envVar) => {
     if (!process.env[envVar]) {
@@ -19,5 +22,4 @@ const validateEnv = () => {
     }
   });
 };
-
 export default validateEnv;

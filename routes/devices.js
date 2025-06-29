@@ -11,8 +11,12 @@ import {
   addEmergencyContact,
   removeEmergencyContact,
   updateEmergencyContact,
-  postDeviceData,
-  getDeviceData
+  postLocationData,
+  getDeviceData,
+  getTriggerHistory,
+  getTriggerEvent,
+  resolveTriggerEvent,
+  checkTriggerWord
 } from '../controllers/deviceController.js';
 import { protect } from '../middlewares/authMiddleware.js';
 
@@ -35,6 +39,9 @@ router.route('/:deviceId/trigger')
 
 router.get('/:deviceId/status', checkDeviceStatus);
 
+router.post('/:deviceId/check-trigger-word', checkTriggerWord);
+router.post('/:deviceId/location', postLocationData);
+
 router.route('/:deviceId/emergency-contacts')
   .post(addEmergencyContact);
 
@@ -43,7 +50,13 @@ router.route('/:deviceId/emergency-contacts/:contactId')
   .delete(removeEmergencyContact);
 
 router.route('/:deviceId/data')
-  .post(postDeviceData)
   .get(getDeviceData);
+
+router.route('/:deviceId/trigger-history')
+  .get(getTriggerHistory);
+
+router.route('/:deviceId/trigger-history/:eventId')
+  .get(getTriggerEvent)
+  .patch(resolveTriggerEvent);
 
 export default router;

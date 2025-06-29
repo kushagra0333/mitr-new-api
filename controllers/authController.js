@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import User from '../models/User.js';
 import AppError from '../utils/appError.js';
 import { sendEmail, sendPasswordReset, sendOtpEmail } from '../utils/email.js';
@@ -66,7 +67,6 @@ export const login = async (req, res, next) => {
       return next(new AppError('Incorrect email or password', 401));
     }
 
-    // Check if OTP is enabled and not provided
     if (user.otpEnabled && !otp) {
       const generatedOtp = user.createOtp();
       await user.save({ validateBeforeSave: false });
@@ -82,7 +82,6 @@ export const login = async (req, res, next) => {
       });
     }
 
-    // Verify OTP if enabled
     if (user.otpEnabled && otp) {
       const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
       
@@ -91,7 +90,6 @@ export const login = async (req, res, next) => {
       }
     }
 
-    // Clear OTP fields
     user.otpCode = undefined;
     user.otpExpires = undefined;
     await user.save({ validateBeforeSave: false });

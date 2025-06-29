@@ -7,7 +7,7 @@ export const createPasswordResetToken = () => {
     .update(resetToken)
     .digest('hex');
   
-  const passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+  const passwordResetExpires = Date.now() + 10 * 60 * 1000;
 
   return { resetToken, passwordResetToken, passwordResetExpires };
 };
@@ -20,7 +20,7 @@ export const verifyPasswordResetToken = (token) => {
 };
 
 export const generateOtp = () => {
-  return Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
+  return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
 export const hashOtp = (otp) => {

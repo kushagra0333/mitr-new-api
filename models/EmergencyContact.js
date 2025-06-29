@@ -18,6 +18,10 @@ const emergencyContactSchema = new mongoose.Schema({
     type: String,
     default: '',
   },
+  triggerWords: {
+    type: [String],
+    default: ['help', 'emergency', 'sos', 'save me'],
+  },
 });
 
 const EmergencyContact = mongoose.model('EmergencyContact', emergencyContactSchema);

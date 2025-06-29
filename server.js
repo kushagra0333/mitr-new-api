@@ -15,38 +15,56 @@ import { fileURLToPath } from 'url';
 // Routes
 import authRouter from './routes/auth.js';
 import devicesRouter from './routes/devices.js';
+import contactRouter from './routes/contact.js';
+import dataRouter from './routes/data.js';
 
 // Middleware
 import { globalErrorHandler } from './middlewares/errorMiddleware.js';
+import validateEnv from './config/env.js';
 
 // Load environment variables
-dotenv.config({ path: './.env' });  // Changed from './config.env' to './.env'
+dotenv.config({ path: './.env' });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-// Add at the top of server.js
+
+// Validate required environment variables
+validateEnv();
+
+// Suppress Mongoose deprecation warnings
 process.removeAllListeners('warning');
+
 // Database connection
 mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
 })
 .then(() => console.log('DB connection successful!'))
-.catch(err => console.error('DB connection error:', err));  // Added error handling
+.catch(err => {
+  console.error('DB connection error:', err);
+  process.exit(1);
+});
 
 // Global Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',  // Added fallback
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true
 }));
 
+// Security headers
 app.use(helmet());
+
+// Body parser
 app.use(express.json({ limit: '10kb' }));
+app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use(cookieParser());
+
+// Data sanitization
 app.use(mongoSanitize());
 app.use(xss());
 app.use(hpp());
 
+// Development logging
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
@@ -62,6 +80,8 @@ app.use('/api', limiter);
 // Routes
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/devices', devicesRouter);
+app.use('/api/v1/contact', contactRouter);
+app.use('/api/v1/data', dataRouter);
 
 // Serve static assets in production
 if (process.env.NODE_ENV === 'production') {
@@ -80,6 +100,7 @@ const server = app.listen(PORT, () => {
   console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
 });
 
+// Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
   console.log('UNHANDLED REJECTION! Shutting down...');
   console.log(err.name, err.message);
@@ -88,6 +109,7 @@ process.on('unhandledRejection', (err) => {
   });
 });
 
+// Handle SIGTERM signal
 process.on('SIGTERM', () => {
   console.log('SIGTERM RECEIVED. Shutting down gracefully');
   server.close(() => {

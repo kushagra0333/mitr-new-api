@@ -1,20 +1,23 @@
-import DeviceData from '../models/Device.js';
+import DeviceData from '../models/DeviceData.js';
 import Device from '../models/Device.js';
 import AppError from '../utils/appError.js';
+import { deviceStateManager } from '../utils/deviceState.js';
 
-// Device posts GPS data - protected by API key middleware
 export const postDeviceData = async (req, res, next) => {
   try {
-    const { deviceId, latitude, longitude, timestamp } = req.body;
+    const { deviceId, latitude, longitude, timestamp, batteryLevel } = req.body;
 
     if (!deviceId || !latitude || !longitude) {
       return next(new AppError('Missing required fields', 400));
     }
 
-    // Validate device exists
     const device = await Device.findOne({ deviceId });
     if (!device) {
       return next(new AppError('Device not found', 404));
+    }
+
+    if (!deviceStateManager.isDeviceTriggered(device._id)) {
+      return next(new AppError('Device must be triggered to post data', 403));
     }
 
     const data = await DeviceData.create({
@@ -22,6 +25,7 @@ export const postDeviceData = async (req, res, next) => {
       latitude,
       longitude,
       timestamp: timestamp || Date.now(),
+      batteryLevel
     });
 
     res.status(201).json({
@@ -33,7 +37,6 @@ export const postDeviceData = async (req, res, next) => {
   }
 };
 
-// User fetches device data by deviceId - protected by JWT
 export const getDeviceData = async (req, res, next) => {
   try {
     const { deviceId } = req.params;

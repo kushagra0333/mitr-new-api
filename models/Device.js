@@ -19,6 +19,10 @@ const emergencyContactSchema = new mongoose.Schema({
   relationship: {
     type: String,
     trim: true
+  },
+  triggerWords: {
+    type: [String],
+    default: ['help', 'emergency', 'sos', 'save me']
   }
 });
 

@@ -2,10 +2,8 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import AppError from '../utils/appError.js';
 
-// Protect routes with JWT
 export const protect = async (req, res, next) => {
   try {
-    // 1) Get token
     let token;
     if (
       req.headers.authorization &&
@@ -22,10 +20,8 @@ export const protect = async (req, res, next) => {
       );
     }
 
-    // 2) Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // 3) Check if user exists
     const currentUser = await User.findById(decoded.id);
     if (!currentUser) {
       return next(
@@ -33,14 +29,12 @@ export const protect = async (req, res, next) => {
       );
     }
 
-    // 4) Check if user changed password after token was issued
     if (currentUser.changedPasswordAfter(decoded.iat)) {
       return next(
         new AppError('User recently changed password! Please log in again.', 401)
       );
     }
 
-    // Grant access
     req.user = currentUser;
     next();
   } catch (err) {
@@ -48,7 +42,6 @@ export const protect = async (req, res, next) => {
   }
 };
 
-// Restrict to specific roles
 export const restrictTo = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
