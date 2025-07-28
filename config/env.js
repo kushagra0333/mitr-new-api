@@ -1,25 +1,15 @@
-import AppError from '../utils/appError.js';
+import dotenv from 'dotenv';
 
-const validateEnv = () => {
-  const requiredEnvVars = [
-    'MONGODB_URI',
-    'JWT_SECRET',
-    'JWT_EXPIRES_IN',
-    'API_KEY',
-    'EMAIL_HOST',
-    'EMAIL_PORT',
-    'EMAIL_FROM'
-  ];
+dotenv.config();
 
-  // Only require email credentials in production
-  if (process.env.NODE_ENV === 'production') {
-    requiredEnvVars.push('EMAIL_USERNAME', 'EMAIL_PASSWORD');
-  }
-
-  requiredEnvVars.forEach((envVar) => {
-    if (!process.env[envVar]) {
-      throw new AppError(`Missing required environment variable: ${envVar}`, 500);
-    }
-  });
+export default {
+  PORT: process.env.PORT || 5000,
+  MONGODB_URI: process.env.MONGODB_URI,
+  JWT_SECRET: process.env.JWT_SECRET,
+  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
+  API_KEY: process.env.API_KEY,
+  SENDGRID_API_KEY: process.env.SENDGRID_API_KEY,
+  SENDGRID_FROM_EMAIL: process.env.SENDGRID_FROM_EMAIL,
+  OTP_EXPIRY_MINUTES: process.env.OTP_EXPIRY_MINUTES || 10,
+  NODE_ENV: process.env.NODE_ENV || 'development'
 };
-export default validateEnv;

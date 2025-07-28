@@ -1,441 +1,138 @@
-import Device from '../models/Device.js';
 import User from '../models/User.js';
-import DeviceData from '../models/DeviceData.js';
-import TriggerHistory from '../models/TriggerHistory.js';
-import AppError from '../utils/appError.js';
-import { deviceStateManager } from '../utils/deviceState.js';
+import Device from '../models/Device.js';
+import ApiError from '../utils/apiError.js';
+import ApiResponse from '../utils/apiResponse.js';
 
 export const linkDevice = async (req, res, next) => {
   try {
-    const { deviceId, name, emergencyContacts } = req.body;
+    const { deviceId } = req.body;
+    const userId = req.user._id;
+
+    if (!deviceId) {
+      throw new ApiError(400, 'Device ID is required');
+    }
+
     const existingDevice = await Device.findOne({ deviceId });
-
     if (existingDevice) {
-      return next(new AppError('Device is already linked to another user', 400));
+      throw new ApiError(400, 'Device already linked to another user');
     }
 
-    const newDevice = await Device.create({
+    const userHasDevice = await User.findOne({ _id: userId, deviceId: { $exists: true } });
+    if (userHasDevice) {
+      throw new ApiError(400, 'User already has a device linked');
+    }
+
+    const device = new Device({
       deviceId,
-      user: req.user._id,
-      name: name || 'My MITR Device',
-      emergencyContacts: emergencyContacts || []
+      ownerId: userId,
+      emergencyContacts: [],
+      triggerWords: []
     });
-
-    await User.findByIdAndUpdate(req.user._id, {
-      $push: { devices: newDevice._id }
-    });
-
-    res.status(201).json({
-      status: 'success',
-      data: { device: newDevice }
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-export const getMyDevices = async (req, res, next) => {
-  try {
-    const devices = await Device.find({ user: req.user._id })
-      .populate('user', 'name email')
-      .select('-__v');
-
-    res.status(200).json({
-      status: 'success',
-      results: devices.length,
-      data: { devices }
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-export const getDeviceInfo = async (req, res, next) => {
-  try {
-    const device = await Device.findOne({
-      _id: req.params.deviceId,
-      user: req.user._id
-    }).populate('user', 'name email');
-
-    if (!device) {
-      return next(new AppError('No device found with that ID', 404));
-    }
-
-    res.status(200).json({
-      status: 'success',
-      data: { device }
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-export const updateDevice = async (req, res, next) => {
-  try {
-    const device = await Device.findOneAndUpdate(
-      { _id: req.params.deviceId, user: req.user._id },
-      req.body,
-      { new: true, runValidators: true }
-    );
-
-    if (!device) {
-      return next(new AppError('No device found with that ID', 404));
-    }
-
-    res.status(200).json({
-      status: 'success',
-      data: { device }
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-export const deleteDevice = async (req, res, next) => {
-  try {
-    const device = await Device.findOneAndDelete({
-      _id: req.params.deviceId,
-      user: req.user._id
-    });
-
-    if (!device) {
-      return next(new AppError('No device found with that ID', 404));
-    }
-
-    await User.findByIdAndUpdate(req.user._id, {
-      $pull: { devices: device._id }
-    });
-
-    res.status(204).json({ status: 'success', data: null });
-  } catch (err) {
-    next(err);
-  }
-};
-
-export const triggerDevice = async (req, res, next) => {
-  try {
-    const device = await Device.findOne({
-      _id: req.params.deviceId,
-      user: req.user._id
-    });
-
-    if (!device) return next(new AppError('No device found with that ID', 404));
-
-    const location = device.lastLocation?.coordinates || null;
-
-    const history = await deviceStateManager.triggerDevice(
-      device._id,
-      req.user._id,
-      location,
-      'manual',
-      device.batteryLevel
-    );
-
-    res.status(200).json({
-      status: 'success',
-      message: 'Device triggered successfully',
-      data: {
-        deviceId: device.deviceId,
-        triggered: true,
-        triggerHistory: history
-      }
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-export const stopTrigger = async (req, res, next) => {
-  try {
-    const device = await Device.findOne({
-      _id: req.params.deviceId,
-      user: req.user._id
-    });
-
-    if (!device) return next(new AppError('No device found with that ID', 404));
-
-    await deviceStateManager.stopTrigger(device._id);
-
-    res.status(200).json({
-      status: 'success',
-      message: 'Device trigger stopped',
-      data: {
-        deviceId: device.deviceId,
-        triggered: false
-      }
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-export const checkDeviceStatus = async (req, res, next) => {
-  try {
-    const device = await Device.findOne({
-      _id: req.params.deviceId,
-      user: req.user._id
-    });
-
-    if (!device) return next(new AppError('No device found with that ID', 404));
-
-    const status = deviceStateManager.checkDeviceStatus(device._id);
-
-    res.status(200).json({
-      status: 'success',
-      data: {
-        deviceId: device.deviceId,
-        ...status
-      }
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-export const checkTriggerWord = async (req, res, next) => {
-  try {
-    const { message } = req.body;
-    const device = await Device.findOne({
-      _id: req.params.deviceId,
-      user: req.user._id
-    }).populate('emergencyContacts');
-
-    if (!device) return next(new AppError('No device found with that ID', 404));
-
-    let triggerWord = null;
-    device.emergencyContacts.forEach(contact => {
-      contact.triggerWords.forEach(word => {
-        if (message.toLowerCase().includes(word.toLowerCase())) {
-          triggerWord = word;
-        }
-      });
-    });
-
-    if (!triggerWord) {
-      return next(new AppError('No trigger word detected', 400));
-    }
-
-    const location = device.lastLocation?.coordinates || null;
-    const history = await deviceStateManager.triggerDevice(
-      device._id,
-      req.user._id,
-      location,
-      'automatic',
-      device.batteryLevel,
-      triggerWord
-    );
-
-    res.status(200).json({
-      status: 'success',
-      message: 'Device triggered by emergency word',
-      data: {
-        deviceId: device.deviceId,
-        triggered: true,
-        triggerWord,
-        triggerHistory: history
-      }
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-export const postLocationData = async (req, res, next) => {
-  try {
-    const { latitude, longitude, batteryLevel, address } = req.body;
-    const device = await Device.findOne({
-      _id: req.params.deviceId,
-      user: req.user._id
-    });
-
-    if (!device) return next(new AppError('No device found with that ID', 404));
-
-    if (!deviceStateManager.isDeviceTriggered(device._id)) {
-      return next(new AppError('Device must be triggered to post location', 403));
-    }
-
-    const location = {
-      type: 'Point',
-      coordinates: [longitude, latitude],
-      address,
-      timestamp: Date.now()
-    };
-
-    device.lastLocation = location;
-    if (batteryLevel) device.batteryLevel = batteryLevel;
     await device.save();
 
-    const data = await DeviceData.create({
-      device: device._id,
-      location,
-      batteryLevel
-    });
-
-    res.status(201).json({
-      status: 'success',
-      data
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-export const addEmergencyContact = async (req, res, next) => {
-  try {
-    const device = await Device.findOneAndUpdate(
-      { _id: req.params.deviceId, user: req.user._id },
-      { $push: { emergencyContacts: req.body } },
-      { new: true, runValidators: true }
-    );
-
-    if (!device) return next(new AppError('No device found with that ID', 404));
-
-    res.status(200).json({ status: 'success', data: { device } });
-  } catch (err) {
-    next(err);
-  }
-};
-
-export const removeEmergencyContact = async (req, res, next) => {
-  try {
-    const device = await Device.findOneAndUpdate(
-      { _id: req.params.deviceId, user: req.user._id },
-      { $pull: { emergencyContacts: { _id: req.params.contactId } } },
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { deviceId },
       { new: true }
     );
 
-    if (!device) return next(new AppError('No device found with that ID', 404));
-
-    res.status(200).json({ status: 'success', data: { device } });
-  } catch (err) {
-    next(err);
+    new ApiResponse(res, 200, {
+      message: 'Device linked successfully',
+      deviceId,
+      user: {
+        id: user._id,
+        userID: user.userID,
+        email: user.email,
+        deviceId: user.deviceId
+      }
+    });
+  } catch (error) {
+    next(error);
   }
 };
 
-export const updateEmergencyContact = async (req, res, next) => {
+export const getDevice = async (req, res, next) => {
   try {
-    const device = await Device.findOne({
-      _id: req.params.deviceId,
-      user: req.user._id
-    });
+    const userId = req.user._id;
 
-    if (!device) return next(new AppError('No device found with that ID', 404));
-
-    const contact = device.emergencyContacts.id(req.params.contactId);
-    if (!contact) return next(new AppError('No contact found with that ID', 404));
-
-    Object.assign(contact, req.body);
-    await device.save();
-
-    res.status(200).json({ status: 'success', data: { device } });
-  } catch (err) {
-    next(err);
-  }
-};
-
-export const getTriggerHistory = async (req, res, next) => {
-  try {
-    const device = await Device.findOne({
-      _id: req.params.deviceId,
-      user: req.user._id
-    });
-    if (!device) return next(new AppError('No device found with that ID', 404));
-
-    const page = req.query.page * 1 || 1;
-    const limit = req.query.limit * 1 || 20;
-    const skip = (page - 1) * limit;
-
-    const filter = { device: device._id };
-    if (req.query.status) filter.status = req.query.status;
-    if (req.query.triggerType) filter.triggerType = req.query.triggerType;
-    if (req.query.startDate || req.query.endDate) {
-      filter.triggeredAt = {};
-      if (req.query.startDate) filter.triggeredAt.$gte = new Date(req.query.startDate);
-      if (req.query.endDate) filter.triggeredAt.$lte = new Date(req.query.endDate);
+    const device = await Device.findOne({ ownerId: userId });
+    if (!device) {
+      throw new ApiError(404, 'Device not found');
     }
 
-    const history = await TriggerHistory.find(filter)
-      .sort('-triggeredAt')
-      .skip(skip)
-      .limit(limit);
-
-    const total = await TriggerHistory.countDocuments(filter);
-
-    res.status(200).json({
-      status: 'success',
-      results: history.length,
-      total,
-      data: { history }
+    new ApiResponse(res, 200, {
+      device: {
+        id: device._id,
+        deviceId: device.deviceId,
+        emergencyContacts: device.emergencyContacts,
+        triggerWords: device.triggerWords,
+        isTriggered: device.isTriggered,
+        lastActive: device.lastActive
+      }
     });
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    next(error);
   }
 };
 
-export const getTriggerEvent = async (req, res, next) => {
+export const updateEmergencyContacts = async (req, res, next) => {
   try {
-    const event = await TriggerHistory.findOne({
-      _id: req.params.eventId,
-      user: req.user._id
-    }).populate('device', 'deviceId name');
+    const { emergencyContacts } = req.body;
+    const userId = req.user._id;
 
-    if (!event) return next(new AppError('No trigger event found with that ID', 404));
+    if (!emergencyContacts || !Array.isArray(emergencyContacts)) {
+      throw new ApiError(400, 'Emergency contacts array is required');
+    }
 
-    res.status(200).json({ status: 'success', data: { event } });
-  } catch (err) {
-    next(err);
-  }
-};
+    for (const contact of emergencyContacts) {
+      if (!contact.name || !contact.phone) {
+        throw new ApiError(400, 'Each contact must have name and phone');
+      }
+    }
 
-export const resolveTriggerEvent = async (req, res, next) => {
-  try {
-    const event = await TriggerHistory.findOneAndUpdate(
-      {
-        _id: req.params.eventId,
-        user: req.user._id,
-        status: 'active'
-      },
-      {
-        status: 'resolved',
-        resolvedAt: Date.now()
-      },
+    const device = await Device.findOneAndUpdate(
+      { ownerId: userId },
+      { emergencyContacts },
       { new: true }
     );
 
-    if (!event) return next(new AppError('No active trigger event found with that ID', 404));
-
-    const currentState = deviceStateManager.checkDeviceStatus(event.device);
-    if (currentState.triggered && currentState.triggerHistoryId.equals(event._id)) {
-      await deviceStateManager.stopTrigger(event.device);
+    if (!device) {
+      throw new ApiError(404, 'Device not found');
     }
 
-    res.status(200).json({ status: 'success', data: { event } });
-  } catch (err) {
-    next(err);
+    new ApiResponse(res, 200, {
+      message: 'Emergency contacts updated successfully',
+      emergencyContacts: device.emergencyContacts
+    });
+  } catch (error) {
+    next(error);
   }
 };
 
-export const getDeviceData = async (req, res, next) => {
+export const updateTriggerWords = async (req, res, next) => {
   try {
-    const device = await Device.findOne({
-      _id: req.params.deviceId,
-      user: req.user._id
-    });
+    const { triggerWords } = req.body;
+    const userId = req.user._id;
 
-    if (!device) {
-      return next(new AppError('No device found with that ID', 404));
+    if (!triggerWords || !Array.isArray(triggerWords)) {
+      throw new ApiError(400, 'Trigger words array is required');
     }
 
-    const data = await DeviceData.find({ device: device._id })
-      .sort('-timestamp')
-      .limit(100);
+    const device = await Device.findOneAndUpdate(
+      { ownerId: userId },
+      { triggerWords },
+      { new: true }
+    );
 
-    res.status(200).json({
-      status: 'success',
-      results: data.length,
-      data
+    if (!device) {
+      throw new ApiError(404, 'Device not found');
+    }
+
+    new ApiResponse(res, 200, {
+      message: 'Trigger words updated successfully',
+      triggerWords: device.triggerWords
     });
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    next(error);
   }
 };

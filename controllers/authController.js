@@ -1,225 +1,202 @@
-import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
 import User from '../models/User.js';
-import AppError from '../utils/appError.js';
-import { sendEmail, sendPasswordReset, sendOtpEmail } from '../utils/email.js';
+import { generateOTP, getOTPExpiry } from '../services/otpService.js';
+import { generateAuthToken } from '../services/tokenService.js';
+import { sendOTPEmail, sendPasswordResetEmail } from '../services/emailService.js';
+import ApiError from '../utils/apiError.js';
+import ApiResponse from '../utils/apiResponse.js';
 
-const signToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN
-  });
-};
-
-const createSendToken = (user, statusCode, res) => {
-  const token = signToken(user._id);
-  
-  const cookieOptions = {
-    expires: new Date(
-      Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000
-    ),
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production'
-  };
-
-  res.cookie('jwt', token, cookieOptions);
-
-  user.password = undefined;
-  user.otpCode = undefined;
-  user.otpExpires = undefined;
-
-  res.status(statusCode).json({
-    status: 'success',
-    token,
-    data: {
-      user
-    }
-  });
-};
-
-export const signup = async (req, res, next) => {
+// authController.js
+export const signupInitiate = async (req, res, next) => {
   try {
-    const { name, email, password, passwordConfirm } = req.body;
-    
-    const newUser = await User.create({
-      name,
-      email,
-      password,
-      passwordConfirm
-    });
+    const { userID, email } = req.body;
 
-    createSendToken(newUser, 201, res);
-  } catch (err) {
-    next(err);
+    const existingUser = await User.findOne({ $or: [{ userID }, { email }] });
+    if (existingUser) {
+      if (existingUser.userID === userID) {
+        throw new ApiError(400, 'UserID already taken');
+      }
+      throw new ApiError(400, 'Email already registered');
+    }
+
+    const otp = generateOTP();
+    const otpExpires = getOTPExpiry();
+
+    // Send OTP email first
+    const emailSent = await sendOTPEmail(email, otp);
+    if (!emailSent) {
+      throw new ApiError(500, 'Failed to send OTP');
+    }
+
+    // Only save user if email was sent successfully
+    const user = new User({
+      userID,
+      email,
+      otp,
+      otpExpires
+    });
+    await user.save();
+
+    new ApiResponse(res, 200, {
+      message: 'OTP sent to email',
+      email
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+export const signupComplete = async (req, res, next) => {
+  try {
+    const { userID, email, otp, password } = req.body;
+
+    const user = await User.findOne({ userID, email });
+    if (!user) {
+      throw new ApiError(404, 'User not found');
+    }
+
+    if (user.otp !== otp || user.otpExpires < new Date()) {
+      throw new ApiError(400, 'Invalid or expired OTP');
+    }
+
+    user.password = password;
+    user.verified = true;
+    user.otp = undefined;
+    user.otpExpires = undefined;
+    await user.save();
+
+    const token = generateAuthToken(user._id);
+    user.tokens = user.tokens.concat({ token });
+    await user.save();
+
+    new ApiResponse(res, 201, {
+      user: {
+        id: user._id,
+        userID: user.userID,
+        email: user.email,
+        verified: user.verified,
+        deviceId: user.deviceId
+      },
+      token
+    });
+  } catch (error) {
+    next(error);
   }
 };
 
 export const login = async (req, res, next) => {
   try {
-    const { email, password, otp } = req.body;
+    const { userID, password } = req.body;
 
-    if (!email || !password) {
-      return next(new AppError('Please provide email and password', 400));
+    const user = await User.findOne({ userID }).select('+password');
+    if (!user) {
+      throw new ApiError(401, 'Invalid credentials');
     }
 
-    const user = await User.findOne({ email }).select('+password +otpCode +otpExpires');
-
-    if (!user || !(await user.correctPassword(password, user.password))) {
-      return next(new AppError('Incorrect email or password', 401));
+    if (!user.verified) {
+      throw new ApiError(403, 'Account not verified');
     }
 
-    if (user.otpEnabled && !otp) {
-      const generatedOtp = user.createOtp();
-      await user.save({ validateBeforeSave: false });
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      throw new ApiError(401, 'Invalid credentials');
+    }
 
-      await sendOtpEmail({
+    const token = generateAuthToken(user._id);
+    user.tokens = user.tokens.concat({ token });
+    await user.save();
+
+    new ApiResponse(res, 200, {
+      user: {
+        id: user._id,
+        userID: user.userID,
         email: user.email,
-        otp: generatedOtp
-      });
-
-      return res.status(200).json({
-        status: 'otp_required',
-        message: 'OTP sent to your email'
-      });
-    }
-
-    if (user.otpEnabled && otp) {
-      const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
-      
-      if (hashedOtp !== user.otpCode || user.otpExpires < Date.now()) {
-        return next(new AppError('Invalid or expired OTP', 401));
-      }
-    }
-
-    user.otpCode = undefined;
-    user.otpExpires = undefined;
-    await user.save({ validateBeforeSave: false });
-
-    createSendToken(user, 200, res);
-  } catch (err) {
-    next(err);
-  }
-};
-
-export const protect = async (req, res, next) => {
-  try {
-    let token;
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-      token = req.headers.authorization.split(' ')[1];
-    } else if (req.cookies.jwt) {
-      token = req.cookies.jwt;
-    }
-
-    if (!token) {
-      return next(new AppError('You are not logged in! Please log in to get access.', 401));
-    }
-
-    const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
-
-    const currentUser = await User.findById(decoded.id);
-    if (!currentUser) {
-      return next(new AppError('The user belonging to this token no longer exists.', 401));
-    }
-
-    if (currentUser.changedPasswordAfter(decoded.iat)) {
-      return next(new AppError('User recently changed password! Please log in again.', 401));
-    }
-
-    req.user = currentUser;
-    next();
-  } catch (err) {
-    next(err);
+        verified: user.verified,
+        deviceId: user.deviceId
+      },
+      token
+    });
+  } catch (error) {
+    next(error);
   }
 };
 
 export const forgotPassword = async (req, res, next) => {
   try {
-    const user = await User.findOne({ email: req.body.email });
+    const { email } = req.body;
+
+    const user = await User.findOne({ email });
     if (!user) {
-      return next(new AppError('There is no user with that email address.', 404));
+      throw new ApiError(404, 'User not found');
     }
 
-    const resetToken = user.createPasswordResetToken();
-    await user.save({ validateBeforeSave: false });
+    const otp = generateOTP();
+    const otpExpires = getOTPExpiry();
 
-    try {
-      const resetURL = `${req.protocol}://${req.get('host')}/api/v1/auth/reset-password/${resetToken}`;
-      await sendPasswordReset(user, resetURL);
+    user.otp = otp;
+    user.otpExpires = otpExpires;
+    await user.save();
 
-      res.status(200).json({
-        status: 'success',
-        message: 'Token sent to email!'
-      });
-    } catch (err) {
-      user.passwordResetToken = undefined;
-      user.passwordResetExpires = undefined;
-      await user.save({ validateBeforeSave: false });
-
-      return next(new AppError('There was an error sending the email. Try again later!', 500));
+    const emailSent = await sendPasswordResetEmail(email, otp);
+    if (!emailSent) {
+      throw new ApiError(500, 'Failed to send OTP');
     }
-  } catch (err) {
-    next(err);
+
+    new ApiResponse(res, 200, {
+      message: 'Password reset OTP sent to email',
+      email
+    });
+  } catch (error) {
+    next(error);
   }
 };
 
 export const resetPassword = async (req, res, next) => {
   try {
-    const hashedToken = crypto
-      .createHash('sha256')
-      .update(req.params.token)
-      .digest('hex');
+    const { email, otp, newPassword } = req.body;
 
-    const user = await User.findOne({
-      passwordResetToken: hashedToken,
-      passwordResetExpires: { $gt: Date.now() }
-    });
-
+    const user = await User.findOne({ email }).select('+otp +otpExpires');
     if (!user) {
-      return next(new AppError('Token is invalid or has expired', 400));
+      throw new ApiError(404, 'User not found');
     }
 
-    user.password = req.body.password;
-    user.passwordConfirm = req.body.passwordConfirm;
-    user.passwordResetToken = undefined;
-    user.passwordResetExpires = undefined;
-    await user.save();
-
-    createSendToken(user, 200, res);
-  } catch (err) {
-    next(err);
-  }
-};
-
-export const updatePassword = async (req, res, next) => {
-  try {
-    const user = await User.findById(req.user.id).select('+password');
-
-    if (!(await user.correctPassword(req.body.currentPassword, user.password))) {
-      return next(new AppError('Your current password is wrong.', 401));
+    if (user.otp !== otp || user.otpExpires < new Date()) {
+      throw new ApiError(400, 'Invalid or expired OTP');
     }
 
-    user.password = req.body.password;
-    user.passwordConfirm = req.body.passwordConfirm;
+    user.password = newPassword;
+    user.otp = undefined;
+    user.otpExpires = undefined;
     await user.save();
 
-    createSendToken(user, 200, res);
-  } catch (err) {
-    next(err);
-  }
-};
-
-export const toggleOtp = async (req, res, next) => {
-  try {
-    const user = await User.findById(req.user.id);
-    user.otpEnabled = !user.otpEnabled;
-    await user.save();
-
-    res.status(200).json({
-      status: 'success',
-      data: {
-        otpEnabled: user.otpEnabled
-      }
+    new ApiResponse(res, 200, {
+      message: 'Password reset successfully'
     });
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const logout = async (req, res, next) => {
+  try {
+    req.user.tokens = req.user.tokens.filter(token => token.token !== req.token);
+    await req.user.save();
+
+    new ApiResponse(res, 200, {
+      message: 'Logged out successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const logoutAll = async (req, res, next) => {
+  try {
+    req.user.tokens = [];
+    await req.user.save();
+
+    new ApiResponse(res, 200, {
+      message: 'Logged out from all devices'
+    });
+  } catch (error) {
+    next(error);
   }
 };
