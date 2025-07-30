@@ -5,34 +5,34 @@ import ApiResponse from '../utils/apiResponse.js';
 
 export const linkDevice = async (req, res, next) => {
   try {
-    const { deviceId } = req.body;
+    const { deviceId, devicePassword } = req.body;
     const userId = req.user._id;
 
-    if (!deviceId) {
-      throw new ApiError(400, 'Device ID is required');
+    if (!deviceId || !devicePassword) {
+      throw new ApiError(400, 'Device ID and password are required');
     }
 
-    const existingDevice = await Device.findOne({ deviceId });
-    if (existingDevice) {
+    const device = await Device.findOne({ deviceId }).select('+devicePassword');
+    if (!device) {
+      throw new ApiError(404, 'Device not found');
+    }
+
+    const isMatch = await device.comparePassword(devicePassword);
+    if (!isMatch) {
+      throw new ApiError(401, 'Invalid device password');
+    }
+
+    if (device.ownerId && device.ownerId.toString() !== userId.toString()) {
       throw new ApiError(400, 'Device already linked to another user');
     }
 
-    const userHasDevice = await User.findOne({ _id: userId, deviceId: { $exists: true } });
-    if (userHasDevice) {
-      throw new ApiError(400, 'User already has a device linked');
+    if (!device.ownerId) {
+      await Device.findByIdAndUpdate(device._id, { ownerId: userId });
     }
-
-    const device = new Device({
-      deviceId,
-      ownerId: userId,
-      emergencyContacts: [],
-      triggerWords: []
-    });
-    await device.save();
 
     const user = await User.findByIdAndUpdate(
       userId,
-      { deviceId },
+      { $addToSet: { deviceIds: deviceId } },
       { new: true }
     );
 
@@ -43,7 +43,7 @@ export const linkDevice = async (req, res, next) => {
         id: user._id,
         userID: user.userID,
         email: user.email,
-        deviceId: user.deviceId
+        deviceIds: user.deviceIds
       }
     });
   } catch (error) {
@@ -53,9 +53,10 @@ export const linkDevice = async (req, res, next) => {
 
 export const getDevice = async (req, res, next) => {
   try {
+    const { deviceId } = req.params;
     const userId = req.user._id;
 
-    const device = await Device.findOne({ ownerId: userId });
+    const device = await Device.findOne({ deviceId, ownerId: userId });
     if (!device) {
       throw new ApiError(404, 'Device not found');
     }
@@ -67,7 +68,8 @@ export const getDevice = async (req, res, next) => {
         emergencyContacts: device.emergencyContacts,
         triggerWords: device.triggerWords,
         isTriggered: device.isTriggered,
-        lastActive: device.lastActive
+        lastActive: device.lastActive,
+        currentLocation: device.isTriggered ? (await getCurrentLocation(deviceId)) : null
       }
     });
   } catch (error) {
@@ -77,7 +79,7 @@ export const getDevice = async (req, res, next) => {
 
 export const updateEmergencyContacts = async (req, res, next) => {
   try {
-    const { emergencyContacts } = req.body;
+    const { deviceId, emergencyContacts } = req.body;
     const userId = req.user._id;
 
     if (!emergencyContacts || !Array.isArray(emergencyContacts)) {
@@ -91,7 +93,7 @@ export const updateEmergencyContacts = async (req, res, next) => {
     }
 
     const device = await Device.findOneAndUpdate(
-      { ownerId: userId },
+      { deviceId, ownerId: userId },
       { emergencyContacts },
       { new: true }
     );
@@ -111,7 +113,7 @@ export const updateEmergencyContacts = async (req, res, next) => {
 
 export const updateTriggerWords = async (req, res, next) => {
   try {
-    const { triggerWords } = req.body;
+    const { deviceId, triggerWords } = req.body;
     const userId = req.user._id;
 
     if (!triggerWords || !Array.isArray(triggerWords)) {
@@ -119,7 +121,7 @@ export const updateTriggerWords = async (req, res, next) => {
     }
 
     const device = await Device.findOneAndUpdate(
-      { ownerId: userId },
+      { deviceId, ownerId: userId },
       { triggerWords },
       { new: true }
     );
@@ -135,4 +137,10 @@ export const updateTriggerWords = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};
+
+const getCurrentLocation = async (deviceId) => {
+  const session = await TriggerSession.findOne({ deviceId, active: true });
+  if (!session || !session.coordinates.length) return null;
+  return session.coordinates[session.coordinates.length - 1];
 };

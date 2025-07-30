@@ -1,4 +1,3 @@
-// user.js
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
@@ -11,6 +10,13 @@ const userSchema = new mongoose.Schema({
     minlength: 3,
     maxlength: 20
   },
+  name: {
+    type: String,
+    required: true,
+    trim: true,
+    minlength: 2,
+    maxlength: 50
+  },
   email: {
     type: String,
     required: true,
@@ -20,20 +26,46 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    minlength: 6, // Keep minlength for when password is provided
+    minlength: 6,
     select: false
   },
-  // ... other fields remain unchanged
+  deviceIds: [{
+    type: String
+  }],
+  verified: {
+    type: Boolean,
+    default: false
+  },
+  otp: {
+    type: String,
+    select: false
+  },
+  otpExpires: {
+    type: Date,
+    select: false
+  },
+  tokens: [{
+    token: {
+      type: String,
+      required: true
+    }
+  }],
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
 });
 
-// Hash password before saving
 userSchema.pre('save', async function(next) {
-  if (this.isModified('password') && this.password) { // Only hash if password exists
+  if (this.isModified('password') && this.password) {
     this.password = await bcrypt.hash(this.password, 10);
   }
   next();
 });
 
-// ... rest of the file unchanged
+userSchema.methods.comparePassword = async function(candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
+};
+
 const User = mongoose.model('User', userSchema);
 export default User;

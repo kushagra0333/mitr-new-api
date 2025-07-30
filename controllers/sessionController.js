@@ -23,7 +23,8 @@ export const startTrigger = async (req, res, next) => {
     const session = new TriggerSession({
       deviceId,
       userId: device.ownerId,
-      active: true
+      active: true,
+      triggerStartLocation: req.body.initialLocation || null
     });
     await session.save();
 
@@ -34,7 +35,8 @@ export const startTrigger = async (req, res, next) => {
     new ApiResponse(res, 201, {
       message: 'Trigger session started',
       sessionId: session._id,
-      startTime: session.startTime
+      startTime: session.startTime,
+      triggerStartLocation: session.triggerStartLocation
     });
   } catch (error) {
     next(error);
@@ -69,7 +71,8 @@ export const addCoordinates = async (req, res, next) => {
     new ApiResponse(res, 200, {
       message: 'Coordinates added to session',
       sessionId: session._id,
-      coordinatesCount: session.coordinates.length
+      coordinatesCount: session.coordinates.length,
+      latestLocation: { lat, long }
     });
   } catch (error) {
     next(error);
@@ -120,10 +123,14 @@ export const stopTrigger = async (req, res, next) => {
 export const getSessionHistory = async (req, res, next) => {
   try {
     const userId = req.user._id;
+    const { deviceId } = req.query;
 
-    const sessions = await TriggerSession.find({ userId })
+    const query = { userId };
+    if (deviceId) query.deviceId = deviceId;
+
+    const sessions = await TriggerSession.find(query)
       .sort({ startTime: -1 })
-      .select('-coordinates');
+      .select('deviceId startTime endTime active coordinatesCount triggerStartLocation');
 
     new ApiResponse(res, 200, {
       sessions
@@ -152,7 +159,42 @@ export const getSessionDetails = async (req, res, next) => {
     }
 
     new ApiResponse(res, 200, {
-      session
+      session: {
+        id: session._id,
+        deviceId: session.deviceId,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        active: session.active,
+        coordinates: session.coordinates,
+        triggerStartLocation: session.triggerStartLocation
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getCurrentLocation = async (req, res, next) => {
+  try {
+    const { deviceId } = req.params;
+    const userId = req.user._id;
+
+    const device = await Device.findOne({ deviceId, ownerId: userId });
+    if (!device) {
+      throw new ApiError(404, 'Device not found');
+    }
+
+    if (!device.isTriggered) {
+      throw new ApiError(403, 'Device is not currently triggered');
+    }
+
+    const session = await TriggerSession.findOne({ deviceId, active: true });
+    if (!session || !session.coordinates.length) {
+      throw new ApiError(404, 'No active location data available');
+    }
+
+    new ApiResponse(res, 200, {
+      currentLocation: session.coordinates[session.coordinates.length - 1]
     });
   } catch (error) {
     next(error);

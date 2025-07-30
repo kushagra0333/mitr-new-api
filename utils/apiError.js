@@ -15,6 +15,8 @@ export const errorHandler = (err, req, res, next) => {
   const statusCode = err.statusCode || 500;
   const message = err.message || 'Internal Server Error';
 
+  console.error(`[${new Date().toISOString()}] ${req.method} ${req.url} - Error: ${message}`);
+
   res.status(statusCode).json({
     status: 'error',
     message,

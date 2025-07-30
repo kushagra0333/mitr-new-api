@@ -8,14 +8,16 @@ import {
   forgotPassword,
   resetPassword,
   logout,
-  logoutAll
+  logoutAll,
+  updateUserInfo,
 } from '../controllers/authController.js';
 import {
   signupInitiateSchema,
   signupCompleteSchema,
   loginSchema,
   forgotPasswordSchema,
-  resetPasswordSchema
+  resetPasswordSchema,
+  updateUserInfoSchema,
 } from '../validations/authValidation.js';
 
 const router = express.Router();
@@ -27,5 +29,6 @@ router.post('/forgot-password', validate(forgotPasswordSchema), forgotPassword);
 router.post('/reset-password', validate(resetPasswordSchema), resetPassword);
 router.post('/logout', auth, logout);
 router.post('/logout-all', auth, logoutAll);
+router.put('/user/update', auth, validate(updateUserInfoSchema), updateUserInfo);
 
 export default router;

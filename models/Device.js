@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 const deviceSchema = new mongoose.Schema({
   deviceId: {
@@ -6,11 +7,15 @@ const deviceSchema = new mongoose.Schema({
     required: true,
     unique: true
   },
+  devicePassword: {
+    type: String,
+    required: true,
+    select: false
+  },
   ownerId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
-    unique: true
+    required: true
   },
   emergencyContacts: [{
     name: {
@@ -33,6 +38,17 @@ const deviceSchema = new mongoose.Schema({
     type: Date
   }
 });
+
+deviceSchema.pre('save', async function(next) {
+  if (this.isModified('devicePassword')) {
+    this.devicePassword = await bcrypt.hash(this.devicePassword, 10);
+  }
+  next();
+});
+
+deviceSchema.methods.comparePassword = async function(candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.devicePassword);
+};
 
 const Device = mongoose.model('Device', deviceSchema);
 

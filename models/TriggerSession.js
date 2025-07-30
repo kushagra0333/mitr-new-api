@@ -22,6 +22,18 @@ const triggerSessionSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  triggerStartLocation: {
+    lat: {
+      type: Number
+    },
+    long: {
+      type: Number
+    },
+    timestamp: {
+      type: Date,
+      default: Date.now
+    }
+  },
   coordinates: [{
     lat: {
       type: Number,
