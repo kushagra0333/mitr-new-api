@@ -317,34 +317,47 @@ export const logoutAll = async (req, res, next) => {
     next(error);
   }
 };
-
 export const updateUserInfo = async (req, res) => {
-  const { username, userID } = req.body;
+  const { name, userID } = req.body;
   try {
-    const user = await User.findById(req.user.userId);
+    const user = await User.findById(req.user._id);
     if (!user) {
-      return sendError(res, 404, 'User not found');
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
     }
 
     // Check if new userID is taken
     if (userID && userID !== user.userID) {
       const existingUser = await User.findOne({ userID });
       if (existingUser) {
-        return sendError(res, 400, 'User ID already taken');
+        return res.status(400).json({
+          success: false,
+          message: 'User ID already taken',
+        });
       }
       user.userID = userID;
     }
 
-    if (username) {
-      user.username = username;
+    if (name) {
+      user.name = name;
     }
 
     await user.save();
 
-    sendSuccess(res, 200, 'User information updated', {
-      user: { userID: user.userID, email: user.email, username: user.username },
+    res.status(200).json({
+      success: true,
+      message: 'User information updated',
+      data: {
+        user: { userID: user.userID, email: user.email, name: user.name },
+      },
     });
   } catch (error) {
-    sendError(res, 500, 'Server error during user info update');
+    console.error('Update User Info Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error during user info update',
+    });
   }
 };

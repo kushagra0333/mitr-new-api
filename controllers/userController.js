@@ -53,19 +53,23 @@ export const updateProfile = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-};
-
-export const changePassword = async (req, res, next) => {
+};export const changePassword = async (req, res, next) => {
   try {
     const { currentPassword, newPassword, confirmPassword } = req.body;
-    const user = req.user;
 
+    // Validation
     if (!currentPassword || !newPassword || !confirmPassword) {
       throw new ApiError(400, 'All password fields are required');
     }
 
     if (newPassword !== confirmPassword) {
       throw new ApiError(400, 'New passwords do not match');
+    }
+
+    // Retrieve user with password field
+    const user = await User.findById(req.user._id).select('+password');
+    if (!user) {
+      throw new ApiError(404, 'User not found');
     }
 
     const isMatch = await user.comparePassword(currentPassword);
@@ -77,9 +81,10 @@ export const changePassword = async (req, res, next) => {
     await user.save();
 
     new ApiResponse(res, 200, {
-      message: 'Password changed successfully'
+      message: 'Password changed successfully',
     });
   } catch (error) {
+    console.error('Change Password Error:', error);
     next(error);
   }
 };
