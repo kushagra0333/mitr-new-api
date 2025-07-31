@@ -30,7 +30,8 @@ const userSchema = new mongoose.Schema({
     select: false
   },
   deviceIds: [{
-    type: String
+    type: String,
+    ref: 'Device', // Reference Device model
   }],
   verified: {
     type: Boolean,

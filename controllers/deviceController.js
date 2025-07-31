@@ -1,7 +1,44 @@
 import User from '../models/User.js';
 import Device from '../models/Device.js';
+import TriggerSession from '../models/TriggerSession.js';
 import ApiError from '../utils/apiError.js';
 import ApiResponse from '../utils/apiResponse.js';
+
+export const createDevice = async (req, res, next) => {
+  try {
+    const { deviceId, devicePassword } = req.body;
+
+    if (!deviceId || !devicePassword) {
+      throw new ApiError(400, 'Device ID and password are required');
+    }
+
+    const existingDevice = await Device.findOne({ deviceId });
+    if (existingDevice) {
+      throw new ApiError(400, 'Device ID already exists');
+    }
+
+    const device = new Device({
+      deviceId,
+      devicePassword,
+      emergencyContacts: [],
+      triggerWords: [],
+      isTriggered: false
+    });
+
+    await device.save();
+
+    new ApiResponse(res, 201, {
+      success: true,
+      message: 'Device created successfully',
+      device: {
+        deviceId: device.deviceId,
+        createdAt: device.createdAt
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 export const linkDevice = async (req, res, next) => {
   try {
@@ -12,12 +49,15 @@ export const linkDevice = async (req, res, next) => {
       throw new ApiError(400, 'Device ID and password are required');
     }
 
-    const device = await Device.findOne({ deviceId }).select('+devicePassword');
+    const trimmedDeviceId = deviceId.trim();
+    const trimmedDevicePassword = devicePassword.trim();
+
+    const device = await Device.findOne({ deviceId: trimmedDeviceId }).select('+devicePassword');
     if (!device) {
       throw new ApiError(404, 'Device not found');
     }
 
-    const isMatch = await device.comparePassword(devicePassword);
+    const isMatch = await device.comparePassword(trimmedDevicePassword);
     if (!isMatch) {
       throw new ApiError(401, 'Invalid device password');
     }
@@ -32,13 +72,14 @@ export const linkDevice = async (req, res, next) => {
 
     const user = await User.findByIdAndUpdate(
       userId,
-      { $addToSet: { deviceIds: deviceId } },
+      { $addToSet: { deviceIds: trimmedDeviceId } },
       { new: true }
     );
 
     new ApiResponse(res, 200, {
+      success: true,
       message: 'Device linked successfully',
-      deviceId,
+      deviceId: trimmedDeviceId,
       user: {
         id: user._id,
         userID: user.userID,
@@ -61,7 +102,10 @@ export const getDevice = async (req, res, next) => {
       throw new ApiError(404, 'Device not found');
     }
 
+    const currentLocation = device.isTriggered ? await getCurrentLocation(deviceId) : null;
+
     new ApiResponse(res, 200, {
+      success: true,
       device: {
         id: device._id,
         deviceId: device.deviceId,
@@ -69,7 +113,7 @@ export const getDevice = async (req, res, next) => {
         triggerWords: device.triggerWords,
         isTriggered: device.isTriggered,
         lastActive: device.lastActive,
-        currentLocation: device.isTriggered ? (await getCurrentLocation(deviceId)) : null
+        currentLocation
       }
     });
   } catch (error) {
@@ -103,6 +147,7 @@ export const updateEmergencyContacts = async (req, res, next) => {
     }
 
     new ApiResponse(res, 200, {
+      success: true,
       message: 'Emergency contacts updated successfully',
       emergencyContacts: device.emergencyContacts
     });
@@ -131,6 +176,7 @@ export const updateTriggerWords = async (req, res, next) => {
     }
 
     new ApiResponse(res, 200, {
+      success: true,
       message: 'Trigger words updated successfully',
       triggerWords: device.triggerWords
     });
@@ -140,7 +186,7 @@ export const updateTriggerWords = async (req, res, next) => {
 };
 
 const getCurrentLocation = async (deviceId) => {
-  const session = await TriggerSession.findOne({ deviceId, active: true });
+  const session = await TriggerSession.findOne({ deviceId, active: true }).lean();
   if (!session || !session.coordinates.length) return null;
   return session.coordinates[session.coordinates.length - 1];
 };

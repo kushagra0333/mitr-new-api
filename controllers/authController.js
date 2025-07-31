@@ -64,9 +64,11 @@ export const signupInitiate = async (req, res) => {
     });
   }
 };
-
 export const signupComplete = async (req, res, next) => {
   try {
+    // Add debug logs
+    console.log('Starting signup complete', req.body);
+
     const schema = Joi.object({
       userID: Joi.string().min(3).max(20).required(),
       email: Joi.string().email().required(),
@@ -76,60 +78,92 @@ export const signupComplete = async (req, res, next) => {
       confirmPassword: Joi.string().valid(Joi.ref('password')).required(),
     });
 
-    const { userID, email, otp, name, password, confirmPassword } = req.body;
-
-    // Validate request
-    const { error } = schema.validate({ userID, email, otp, name, password, confirmPassword });
+    const { error } = schema.validate(req.body);
     if (error) {
+      console.log('Validation error:', error);
       throw new ApiError(400, error.details[0].message);
     }
 
-    // Find OTP from DB
+    const { userID, email, otp, name, password } = req.body;
+
+    // Check if user already exists (double verification)
+    const existingUser = await User.findOne({
+      $or: [{ userID }, { email }],
+    });
+
+    if (existingUser) {
+      throw new ApiError(400, 'User already exists with this userID or email');
+    }
+
+    // Find OTP record
     const otpRecord = await OTP.findOne({ email });
-    if (!otpRecord || otpRecord.otp !== otp || otpRecord.createdAt < new Date(Date.now() - 10 * 60 * 1000)) {
+    console.log('Database OTP record:', otpRecord);
+    
+    if (!otpRecord) {
+      console.log('No OTP record found for email:', email);
+      throw new ApiError(400, 'OTP not found or expired');
+    }
+
+    // Verify OTP (case insensitive)
+    const isOtpValid = otpRecord.otp.localeCompare(otp, undefined, { sensitivity: 'base' }) === 0;
+    const isOtpExpired = otpRecord.createdAt < new Date(Date.now() - 10 * 60 * 1000);
+
+    console.log(`OTP validation: 
+      Input OTP: ${otp}
+      Stored OTP: ${otpRecord.otp}
+      Match: ${isOtpValid}
+      Expired: ${isOtpExpired}`);
+
+    if (!isOtpValid || isOtpExpired) {
       throw new ApiError(400, 'Invalid or expired OTP');
     }
 
-    // Check again if user already exists
-    const existingUser = await User.findOne({ $or: [{ email }, { userID }] });
-    if (existingUser) {
-      throw new ApiError(400, 'User already exists');
-    }
-
     // Create new user
-    const newUser = new User({
+    const user = new User({
       userID,
       email,
       name,
       password,
-      verified: true,
+      verified: true
     });
 
-    await newUser.save();
+    // Save user to database
+    await user.save();
 
-    const token = generateAuthToken(newUser._id);
-    newUser.tokens = newUser.tokens.concat({ token });
-    await newUser.save();
+    // Generate JWT token
+    const token = generateAuthToken(user._id);
 
-    // Remove OTP
-    await OTP.deleteOne({ email });
+    // Add token to user's tokens array
+    user.tokens = user.tokens.concat({ token });
+    await user.save();
 
-    new ApiResponse(res, 201, {
-      user: {
-        id: newUser._id,
-        userID: newUser.userID,
-        email: newUser.email,
-        name: newUser.name,
-        verified: newUser.verified,
-        deviceIds: newUser.deviceIds,
-      },
-      token,
+    // Delete used OTP record
+    await OTP.deleteOne({ _id: otpRecord._id });
+
+    // Prepare user data for response (without sensitive info)
+    const userData = {
+      id: user._id,
+      userID: user.userID,
+      email: user.email,
+      name: user.name,
+      verified: user.verified
+    };
+
+    // Send success response
+    res.status(201).json({
+      success: true,
+      message: 'User registered successfully',
+      data: {
+        token,
+        user: userData
+      }
     });
+
   } catch (error) {
+    console.error('Signup complete error:', error);
     next(error);
   }
 };
-
 export const login = async (req, res, next) => {
   try {
     const schema = Joi.object({

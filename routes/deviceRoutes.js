@@ -6,21 +6,19 @@ import {
   linkDevice,
   getDevice,
   updateEmergencyContacts,
-  updateTriggerWords
+  updateTriggerWords,
+  createDevice,
 } from '../controllers/deviceController.js';
-import {
-  startTrigger,
-  addCoordinates,
-  stopTrigger
-} from '../controllers/sessionController.js';
 import {
   linkDeviceSchema,
   updateEmergencyContactsSchema,
   updateTriggerWordsSchema,
   startTriggerSchema,
   addCoordinatesSchema,
-  stopTriggerSchema
+  stopTriggerSchema,
+  createDeviceSchema,
 } from '../validations/deviceValidation.js';
+import { startTrigger, addCoordinates, stopTrigger } from '../controllers/sessionController.js';
 
 const router = express.Router();
 
@@ -31,5 +29,6 @@ router.put('/trigger-words', auth, validate(updateTriggerWordsSchema), updateTri
 router.post('/trigger/start', deviceAuth, validate(startTriggerSchema), startTrigger);
 router.post('/coordinates/add', deviceAuth, validate(addCoordinatesSchema), addCoordinates);
 router.post('/trigger/stop', deviceAuth, validate(stopTriggerSchema), stopTrigger);
+router.post('/create', deviceAuth, validate(createDeviceSchema), createDevice);
 
 export default router;

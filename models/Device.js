@@ -15,7 +15,6 @@ const deviceSchema = new mongoose.Schema({
   ownerId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
   },
   emergencyContacts: [{
     name: {
@@ -25,17 +24,27 @@ const deviceSchema = new mongoose.Schema({
     phone: {
       type: String,
       required: true
+    },
+    isPrimary: {
+      type: Boolean,
+      default: false
     }
   }],
   triggerWords: [{
     type: String
   }],
-  isTriggered: {
-    type: Boolean,
-    default: false
+  currentSession: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'TriggerSession'
   },
   lastActive: {
     type: Date
+  },
+  locationUpdateInterval: {
+    type: Number,
+    default: 30, // seconds between location updates
+    min: 5,
+    max: 300
   }
 });
 
@@ -51,5 +60,4 @@ deviceSchema.methods.comparePassword = async function(candidatePassword) {
 };
 
 const Device = mongoose.model('Device', deviceSchema);
-
 export default Device;
