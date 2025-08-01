@@ -7,6 +7,8 @@ import sessionRoutes from './routes/sessionRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import { errorHandler } from './utils/apiError.js';
 import config from './config/env.js';
+import fs from 'fs/promises';
+import path from 'path';
 
 // Create app
 const app = express();
@@ -23,6 +25,33 @@ app.use('/api/auth', authRoutes);
 app.use('/api/device', deviceRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/user', userRoutes);
+
+// Emergency file endpoints
+app.post('/api/update-emergency-data', async (req, res) => {
+  try {
+    const data = req.body;
+    await fs.writeFile(
+      path.join(__dirname, 'src/emergency.txt'),
+      JSON.stringify(data, null, 2)
+    );
+    console.log('Updated emergency.txt:', data);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('File write error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/emergency-data', async (req, res) => {
+  try {
+    const data = await fs.readFile(path.join(__dirname, 'src/emergency.txt'), 'utf8');
+    res.set('Content-Type', 'text/plain');
+    res.send(data);
+  } catch (error) {
+    console.error('File read error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {

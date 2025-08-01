@@ -6,7 +6,6 @@ export const linkDeviceSchema = Joi.object({
 });
 
 export const updateEmergencyContactsSchema = Joi.object({
-  deviceId: Joi.string().required(),
   emergencyContacts: Joi.array()
     .items(
       Joi.object({
@@ -18,7 +17,6 @@ export const updateEmergencyContactsSchema = Joi.object({
 });
 
 export const updateTriggerWordsSchema = Joi.object({
-  deviceId: Joi.string().required(),
   triggerWords: Joi.array().items(Joi.string()).required(),
 });
 

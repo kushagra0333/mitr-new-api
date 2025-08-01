@@ -24,8 +24,8 @@ const router = express.Router();
 
 router.post('/link', auth, validate(linkDeviceSchema), linkDevice);
 router.get('/:deviceId', auth, getDevice);
-router.put('/emergency-contacts', auth, validate(updateEmergencyContactsSchema), updateEmergencyContacts);
-router.put('/trigger-words', auth, validate(updateTriggerWordsSchema), updateTriggerWords);
+router.put('/:deviceId/emergency-contacts', auth, validate(updateEmergencyContactsSchema), updateEmergencyContacts);
+router.put('/:deviceId/trigger-words', auth, validate(updateTriggerWordsSchema), updateTriggerWords);
 router.post('/trigger/start', deviceAuth, validate(startTriggerSchema), startTrigger);
 router.post('/coordinates/add', deviceAuth, validate(addCoordinatesSchema), addCoordinates);
 router.post('/trigger/stop', deviceAuth, validate(stopTriggerSchema), stopTrigger);

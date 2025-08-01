@@ -109,8 +109,8 @@ export const getDevice = async (req, res, next) => {
       device: {
         id: device._id,
         deviceId: device.deviceId,
-        emergencyContacts: device.emergencyContacts,
-        triggerWords: device.triggerWords,
+        emergencyContacts: device.emergencyContacts || [],
+        triggerWords: device.triggerWords || [],
         isTriggered: device.isTriggered,
         lastActive: device.lastActive,
         currentLocation
@@ -123,7 +123,8 @@ export const getDevice = async (req, res, next) => {
 
 export const updateEmergencyContacts = async (req, res, next) => {
   try {
-    const { deviceId, emergencyContacts } = req.body;
+    const { deviceId } = req.params;
+    const { emergencyContacts } = req.body;
     const userId = req.user._id;
 
     if (!emergencyContacts || !Array.isArray(emergencyContacts)) {
@@ -158,7 +159,8 @@ export const updateEmergencyContacts = async (req, res, next) => {
 
 export const updateTriggerWords = async (req, res, next) => {
   try {
-    const { deviceId, triggerWords } = req.body;
+    const { deviceId } = req.params;
+    const { triggerWords } = req.body;
     const userId = req.user._id;
 
     if (!triggerWords || !Array.isArray(triggerWords)) {
