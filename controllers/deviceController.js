@@ -192,3 +192,31 @@ const getCurrentLocation = async (deviceId) => {
   if (!session || !session.coordinates.length) return null;
   return session.coordinates[session.coordinates.length - 1];
 };
+
+export const getPublicEmergencyContacts = async (req, res, next) => {
+  try {
+    const { deviceId } = req.params;
+
+    if (!deviceId) {
+      throw new ApiError(400, 'Device ID is required');
+    }
+
+    const device = await Device.findOne({ deviceId });
+
+    if (!device) {
+      throw new ApiError(404, 'Device not found');
+    }
+
+    // Return only phone numbers (not names or IDs)
+    const contacts = device.emergencyContacts.map(contact => ({
+      phone: contact.phone
+    }));
+
+    new ApiResponse(res, 200, {
+      success: true,
+      emergencyContacts: contacts
+    });
+  } catch (error) {
+    next(error);
+  }
+};

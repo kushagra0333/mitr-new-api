@@ -164,6 +164,7 @@ export const signupComplete = async (req, res, next) => {
     next(error);
   }
 };
+
 export const login = async (req, res, next) => {
   try {
     const schema = Joi.object({
@@ -173,12 +174,13 @@ export const login = async (req, res, next) => {
 
     const { userID, password } = req.body;
 
-    // Validate request
+    // Validate input
     const { error } = schema.validate({ userID, password });
     if (error) {
       throw new ApiError(400, error.details[0].message);
     }
 
+    // Find user and validate password
     const user = await User.findOne({ userID }).select('+password');
     if (!user) {
       throw new ApiError(401, 'Invalid credentials');
@@ -193,10 +195,15 @@ export const login = async (req, res, next) => {
       throw new ApiError(401, 'Invalid credentials');
     }
 
+    // Generate new token
     const token = generateAuthToken(user._id);
-    user.tokens = user.tokens.concat({ token });
+
+    // Keep only the latest token
+    user.tokens = [{ token }]; // This deletes previous token and adds only new one
+
     await user.save();
 
+    // Respond with user info and token
     new ApiResponse(res, 200, {
       user: {
         id: user._id,
@@ -212,6 +219,7 @@ export const login = async (req, res, next) => {
     next(error);
   }
 };
+
 
 export const forgotPassword = async (req, res, next) => {
   try {

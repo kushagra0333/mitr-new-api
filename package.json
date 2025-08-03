@@ -17,6 +17,7 @@
     "joi": "^17.7.0",
     "jsonwebtoken": "^9.0.0",
     "mongoose": "^6.8.0",
+    "twilio": "^5.8.0",
     "winston": "^3.8.2"
   },
   "devDependencies": {

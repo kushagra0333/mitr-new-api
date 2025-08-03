@@ -8,6 +8,7 @@ import {
   updateEmergencyContacts,
   updateTriggerWords,
   createDevice,
+  getPublicEmergencyContacts
 } from '../controllers/deviceController.js';
 import {
   linkDeviceSchema,
@@ -24,6 +25,7 @@ const router = express.Router();
 
 router.post('/link', auth, validate(linkDeviceSchema), linkDevice);
 router.get('/:deviceId', auth, getDevice);
+router.get('/:deviceId/emergency-contacts/public', getPublicEmergencyContacts);
 router.put('/:deviceId/emergency-contacts', auth, validate(updateEmergencyContactsSchema), updateEmergencyContacts);
 router.put('/:deviceId/trigger-words', auth, validate(updateTriggerWordsSchema), updateTriggerWords);
 router.post('/trigger/start', deviceAuth, validate(startTriggerSchema), startTrigger);
