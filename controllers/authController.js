@@ -198,9 +198,7 @@ export const login = async (req, res, next) => {
     // Generate new token
     const token = generateAuthToken(user._id);
 
-    // Keep only the latest token
-    user.tokens = [{ token }]; // This deletes previous token and adds only new one
-
+    user.tokens = user.tokens.concat({ token });
     await user.save();
 
     // Respond with user info and token
