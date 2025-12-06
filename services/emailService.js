@@ -1,40 +1,56 @@
-import sgMail from '@sendgrid/mail';
-import config from '../config/env.js';
+// services/emailService.js
 
-sgMail.setApiKey(config.SENDGRID_API_KEY);
+import nodemailer from "nodemailer";
+import config from "../config/env.js";
 
+// Gmail SMTP transporter
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: config.SMTP_USER,   // your gmail
+    pass: config.SMTP_PASS    // app password
+  }
+});
+
+// Send OTP
 export const sendOTPEmail = async (email, otp) => {
   try {
-    const msg = {
+    const mailOptions = {
+      from: `MITR SOS <${config.SMTP_USER}>`,
       to: email,
-      from: config.SENDGRID_FROM_EMAIL || 'no-reply@mitrsos.com', // Use verified sender email
-      subject: 'Your MITR SOS Verification Code',
-      text: `Your verification code is: ${otp}\n\nThis code will expire in ${config.OTP_EXPIRY_MINUTES} minutes.`,
-      html: `<p>Your verification code is: <strong>${otp}</strong></p><p>This code will expire in ${config.OTP_EXPIRY_MINUTES} minutes.</p>`
+      subject: "Your MITR SOS Verification Code",
+      html: `
+        <p>Your verification code is: <strong>${otp}</strong></p>
+        <p>This code will expire in ${config.OTP_EXPIRY_MINUTES} minutes.</p>
+      `
     };
 
-    await sgMail.send(msg);
+    await transporter.sendMail(mailOptions);
     return true;
   } catch (error) {
-    console.error('Error sending email:', error);
+    console.error("❌ Nodemailer OTP Error:", error);
     return false;
   }
 };
 
+
+// Send Reset OTP
 export const sendPasswordResetEmail = async (email, otp) => {
   try {
-    const msg = {
+    const mailOptions = {
+      from: `MITR SOS <${config.SMTP_USER}>`,
       to: email,
-      from: config.SENDGRID_FROM_EMAIL || 'no-reply@mitrsos.com', // Use verified sender email
-      subject: 'MITR SOS Password Reset',
-      text: `Your password reset code is: ${otp}\n\nThis code will expire in ${config.OTP_EXPIRY_MINUTES} minutes.`,
-      html: `<p>Your password reset code is: <strong>${otp}</strong></p><p>This code will expire in ${config.OTP_EXPIRY_MINUTES} minutes.</p>`
+      subject: "MITR SOS Password Reset",
+      html: `
+        <p>Your password reset code is: <strong>${otp}</strong></p>
+        <p>This code will expire in ${config.OTP_EXPIRY_MINUTES} minutes.</p>
+      `
     };
 
-    await sgMail.send(msg);
+    await transporter.sendMail(mailOptions);
     return true;
   } catch (error) {
-    console.error('Error sending reset email:', error);
+    console.error("❌ Nodemailer Reset Error:", error);
     return false;
   }
 };
