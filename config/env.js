@@ -16,5 +16,10 @@ export default {
 
   OTP_EXPIRY_MINUTES: process.env.OTP_EXPIRY_MINUTES || 10,
   NODE_ENV: process.env.NODE_ENV || 'development',
-  DEVICE_DEFAULT_PASSWORD: process.env.DEVICE_DEFAULT_PASSWORD || 'default123'
+  DEVICE_DEFAULT_PASSWORD: process.env.DEVICE_DEFAULT_PASSWORD || 'default123',
+
+  // Twilio Configuration
+  TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID,
+  TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN,
+  TWILIO_PHONE_NUMBER: process.env.TWILIO_PHONE_NUMBER
 };

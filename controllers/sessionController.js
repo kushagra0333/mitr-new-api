@@ -2,59 +2,61 @@ import Device from '../models/Device.js';
 import TriggerSession from '../models/TriggerSession.js';
 import ApiError from '../utils/apiError.js';
 import ApiResponse from '../utils/apiResponse.js';
+import smsService from '../services/triggersmsservice.js';
 
-// In-memory tracking of active sessions
 const activeSessions = new Map();
 
 export const startTrigger = async (req, res, next) => {
   try {
     const { deviceId, initialLocation } = req.body;
 
-    if (!deviceId) {
-      throw new ApiError(400, 'Device ID is required');
-    }
+    if (!deviceId) throw new ApiError(400, "Device ID is required");
 
-    // Check if device exists and is not already triggered
     const device = await Device.findOne({ deviceId });
-    if (!device) {
-      throw new ApiError(404, 'Device not found');
-    }
+    if (!device) throw new ApiError(404, "Device not found");
 
     if (device.currentSession) {
-      const existingSession = await TriggerSession.findById(device.currentSession);
-      if (existingSession && existingSession.status === 'active') {
-        throw new ApiError(400, 'Device is already in an active session');
+      const oldSession = await TriggerSession.findById(device.currentSession);
+      if (oldSession?.status === "active") {
+        throw new ApiError(400, "Device already has an active session");
       }
     }
 
-    // Create new trigger session
     const session = new TriggerSession({
       deviceId,
       userId: device.ownerId,
-      status: 'active',
+      status: "active",
+      startTime: new Date(),
       triggerStartLocation: initialLocation || null
     });
 
     await session.save();
 
-    // Update device with current session
     device.currentSession = session._id;
     device.lastActive = new Date();
     await device.save();
 
-    // Track session in memory for real-time updates
     activeSessions.set(deviceId, {
       sessionId: session._id,
       lastUpdate: new Date(),
       coordinatesCount: 0
     });
 
+    // 🟢 SEND EMERGENCY SMS (no await)
+    if (device.emergencyContacts?.length > 0) {
+      smsService
+        .sendEmergencySMS(device.emergencyContacts, deviceId)
+        .then(r => console.log("Emergency SMS completed:", r))
+        .catch(e => console.error("SMS failed:", e.message));
+    }
+
     new ApiResponse(res, 201, {
-      message: 'Trigger session started',
+      message: "Trigger session started",
       sessionId: session._id,
       startTime: session.startTime,
       updateInterval: device.locationUpdateInterval,
-      triggerStartLocation: session.triggerStartLocation
+      triggerStartLocation: session.triggerStartLocation,
+      smsSent: device.emergencyContacts?.length > 0
     });
   } catch (error) {
     next(error);
