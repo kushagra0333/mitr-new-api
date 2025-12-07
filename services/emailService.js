@@ -1,56 +1,70 @@
 // services/emailService.js
-
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import config from "../config/env.js";
 
-// Gmail SMTP transporter
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: config.SMTP_USER,   // your gmail
-    pass: config.SMTP_PASS    // app password
-  }
-});
+const resend = new Resend(config.RESEND_API_KEY);
 
-// Send OTP
+// Helper function to build FROM value
+function getFrom() {
+  return `${config.RESEND_FROM_NAME} <${config.RESEND_FROM_ADDRESS}>`;
+}
+
+// SEND VERIFICATION / SIGNUP OTP
 export const sendOTPEmail = async (email, otp) => {
   try {
-    const mailOptions = {
-      from: `MITR SOS <${config.SMTP_USER}>`,
+    const from = getFrom();
+    console.log("Sending OTP from:", from);
+
+    const result = await resend.emails.send({
+      from,
       to: email,
       subject: "Your MITR SOS Verification Code",
       html: `
-        <p>Your verification code is: <strong>${otp}</strong></p>
-        <p>This code will expire in ${config.OTP_EXPIRY_MINUTES} minutes.</p>
-      `
-    };
+        <h2>Your Verification Code</h2>
+        <p>Your OTP is:</p>
+        <h1>${otp}</h1>
+        <p>Expires in ${config.OTP_EXPIRY_MINUTES} minutes.</p>
+      `,
+    });
 
-    await transporter.sendMail(mailOptions);
+    if (result.error) {
+      console.error("❌ Resend OTP Error:", result.error);
+      return false;
+    }
+
     return true;
   } catch (error) {
-    console.error("❌ Nodemailer OTP Error:", error);
+    console.error("❌ Resend Exception OTP:", error);
     return false;
   }
 };
 
-
-// Send Reset OTP
+// SEND PASSWORD RESET OTP
 export const sendPasswordResetEmail = async (email, otp) => {
   try {
-    const mailOptions = {
-      from: `MITR SOS <${config.SMTP_USER}>`,
+    const from = getFrom();
+    console.log("Sending Reset OTP from:", from);
+
+    const result = await resend.emails.send({
+      from,
       to: email,
       subject: "MITR SOS Password Reset",
       html: `
-        <p>Your password reset code is: <strong>${otp}</strong></p>
-        <p>This code will expire in ${config.OTP_EXPIRY_MINUTES} minutes.</p>
-      `
-    };
+        <h2>Password Reset</h2>
+        <p>Your reset OTP is:</p>
+        <h1>${otp}</h1>
+        <p>This code expires in ${config.OTP_EXPIRY_MINUTES} minutes.</p>
+      `,
+    });
 
-    await transporter.sendMail(mailOptions);
+    if (result.error) {
+      console.error("❌ Resend Reset Error:", result.error);
+      return false;
+    }
+
     return true;
   } catch (error) {
-    console.error("❌ Nodemailer Reset Error:", error);
+    console.error("❌ Resend Exception Reset:", error);
     return false;
   }
 };

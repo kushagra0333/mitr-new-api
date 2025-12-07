@@ -9,9 +9,10 @@ export default {
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
 
   API_KEY: process.env.API_KEY,
-  // ✅ Add these two for Nodemailer
-  SMTP_USER: process.env.SMTP_USER,
-  SMTP_PASS: process.env.SMTP_PASS,
+  RESEND_API_KEY: process.env.RESEND_API_KEY,
+  RESEND_FROM_NAME: process.env.RESEND_FROM_NAME || "MITR SOS",
+  RESEND_FROM_ADDRESS: process.env.RESEND_FROM_ADDRESS || "onboarding@resend.dev",
+  RESEND_FROM_EMAIL: `${process.env.RESEND_FROM_NAME || "MITR SOS"} <${process.env.RESEND_FROM_ADDRESS || "onboarding@resend.dev"}>`,
 
   OTP_EXPIRY_MINUTES: process.env.OTP_EXPIRY_MINUTES || 10,
   NODE_ENV: process.env.NODE_ENV || 'development',
